@@ -5,3 +5,14 @@ type LoginResponse struct {
 	Username string
 	MemberId uint
 }
+
+type RegisterResponse struct {
+	Id       uint
+	Username string
+}
+
+type MemberResponse struct {
+	Id       uint
+	Username string
+	Mail     string
+}

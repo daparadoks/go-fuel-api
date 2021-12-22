@@ -109,6 +109,9 @@ func (h *Handler) SetupRoutes() {
 
 	h.Router.HandleFunc("/api/login", BasicAuth(h.Login)).Methods("POST")
 
+	h.Router.HandleFunc("/api/member", BasicAuth(h.GetMember)).Methods("GET")
+	h.Router.HandleFunc("/api/member", BasicAuth(h.Register)).Methods("POST")
+
 	h.Router.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(http.StatusOK)
@@ -129,6 +132,9 @@ func SendOkResponse(w http.ResponseWriter, resp interface{}) {
 	}
 }
 
+func GetErrorResponseWithError(w http.ResponseWriter, err error) {
+	GetErrorResponseWithCode(w, err.Error(), http.StatusBadRequest)
+}
 func GetErrorResponse(w http.ResponseWriter, message string) {
 	GetErrorResponseWithCode(w, message, http.StatusBadRequest)
 }

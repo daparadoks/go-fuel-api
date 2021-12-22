@@ -49,6 +49,49 @@ func (s *Service) GetMember(username string) (Member, error) {
 	return member, nil
 }
 
+// GetMember -
+func (s *Service) GetMemberById(id uint) (Member, error) {
+	var member Member
+	if result := s.DB.First(&member).Where("ID = ?", id); result.Error != nil {
+		return Member{}, result.Error
+	}
+	return member, nil
+}
+
+// GetMember -
+func (s *Service) GetMemberByMail(mail string) (Member, error) {
+	var member Member
+	if result := s.DB.First(&member).Where("Mail = ?", mail); result.Error != nil {
+		return Member{}, result.Error
+	}
+	return member, nil
+}
+
+// GetMember -
+func (s *Service) GetMemberByToken(token string) (Member, error) {
+	var member Member
+	memberToken, err := s.GetToken(token)
+	if err != nil {
+		return member, err
+	}
+	member, err = s.GetMemberById(memberToken.MemberId)
+	return member, err
+}
+
+func (s *Service) Register(member Member) (Member, error) {
+	if result := s.DB.Save(&member); result.Error != nil {
+		return Member{}, result.Error
+	}
+	return member, nil
+}
+
+func (s *Service) GetToken(token string) (MemberToken, error) {
+	var memberToken MemberToken
+	result := s.DB.First(&memberToken).Where("Token=?", token)
+
+	return memberToken, result.Error
+}
+
 func (s *Service) GetTokenByMemberId(deviceToken string, memberId uint) (MemberToken, error) {
 	var token MemberToken
 	result := s.DB.First(&token).Where("DeviceToken=? and MemberId=?", deviceToken, memberId)

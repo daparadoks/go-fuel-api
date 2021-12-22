@@ -45,7 +45,7 @@ func (app *App) Run() error {
 	handler := transportHTTP.NewHandler(memberService)
 	handler.SetupRoutes()
 
-	if err := http.ListenAndServe(":8080", handler.Router); err != nil {
+	if err := http.ListenAndServe(":3434", handler.Router); err != nil {
 		fmt.Println("Failed to set up server")
 		return err
 	}

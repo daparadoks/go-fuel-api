@@ -6,3 +6,11 @@ type LoginRequest struct {
 	DeviceToken string
 	RememberMe  bool
 }
+
+type RegisterRequest struct {
+	Username        string
+	Password        string
+	ConfirmPassword string
+	Mail            string
+	DeviceToken     string
+}
