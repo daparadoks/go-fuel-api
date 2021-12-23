@@ -7,5 +7,6 @@ import (
 )
 
 func (h *Handler) GetMember(w http.ResponseWriter, r *http.Request, m responses.MemberResponse) {
+	SetHeaders(w)
 	SendOkResponse(w, m)
 }

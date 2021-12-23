@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/daparadoks/go-fuel-api/internal/consumption"
 	"github.com/daparadoks/go-fuel-api/internal/member"
 	"github.com/daparadoks/go-fuel-api/internal/responses"
 	jwt "github.com/golang-jwt/jwt"
@@ -15,8 +16,9 @@ import (
 
 // Handler - stores pointer to our comments service
 type Handler struct {
-	Router        *mux.Router
-	MemberService *member.Service
+	Router             *mux.Router
+	MemberService      *member.Service
+	ConsumptionService *consumption.Service
 }
 
 type Response struct {
@@ -26,9 +28,10 @@ type Response struct {
 }
 
 // NewHandler - returns a pointer to a Handler
-func NewHandler(memberService *member.Service) *Handler {
+func NewHandler(memberService *member.Service, consumptionService *consumption.Service) *Handler {
 	return &Handler{
-		MemberService: memberService,
+		MemberService:      memberService,
+		ConsumptionService: consumptionService,
 	}
 }
 
@@ -58,7 +61,7 @@ func BasicAuth(original func(w http.ResponseWriter, r *http.Request)) func(w htt
 }
 
 // JWTAuth - a handy middleware function that will provide basic auth around specific endpoints
-func JWTAuth(original func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
+func JWTAuth(original func(w http.ResponseWriter, r *http.Request, m responses.MemberResponse)) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Info("jwt auth endpoint hit")
 		authHeader := r.Header["Authorization"]
@@ -76,7 +79,10 @@ func JWTAuth(original func(w http.ResponseWriter, r *http.Request)) func(w http.
 		}
 
 		if validateToken(authHeaderParts[1], "") {
-			original(w, r)
+			deviceTokenHeader := r.Header["DeviceToken"]
+			deviceToken := deviceTokenHeader[0]
+			currentMember := responses.InitGuest(deviceToken)
+			original(w, r, currentMember)
 		} else {
 			SetHeaders(w)
 			GetErrorResponseWithCode(w, "not authorized", 401)
@@ -95,7 +101,6 @@ func UserAuth(original func(w http.ResponseWriter, r *http.Request, m responses.
 			return
 		}
 
-		log.Info("user auth 2")
 		authHeaderParts := strings.Split(authHeader[0], " ")
 		if len(authHeaderParts) != 2 || strings.ToLower(authHeaderParts[0]) != "bearer" {
 			SetHeaders(w)
@@ -103,10 +108,7 @@ func UserAuth(original func(w http.ResponseWriter, r *http.Request, m responses.
 			return
 		}
 
-		log.Info("user auth 3")
-
 		if validateToken(authHeaderParts[1], "") {
-			log.Info("user auth 4")
 			tokenHeader := r.Header["Token"]
 			token := tokenHeader[0]
 			memberToken, err := h.MemberService.GetToken(token)
@@ -123,11 +125,15 @@ func UserAuth(original func(w http.ResponseWriter, r *http.Request, m responses.
 				return
 			}
 
+			deviceTokenHeader := r.Header["Authorization"]
+			deviceToken := deviceTokenHeader[0]
+
 			var currentMember responses.MemberResponse
 			currentMember.Id = memberToken.MemberId
 			currentMember.Mail = member.Mail
 			currentMember.Username = member.Username
 			currentMember.Token = memberToken.Token
+			currentMember.DeviceToken = deviceToken
 			original(w, r, currentMember)
 		} else {
 			SetHeaders(w)
@@ -158,26 +164,6 @@ func validateToken(accessToken string, userKey string) bool {
 	return token.Valid
 }
 
-// SetupRoutes - sets up all the routes for our application
-func (h *Handler) SetupRoutes() {
-	fmt.Println("Setting up routes")
-	h.Router = mux.NewRouter()
-	h.Router.Use(LoggingMiddleware)
-
-	h.Router.HandleFunc("/api/login", JWTAuth(h.Login)).Methods("POST")
-
-	h.Router.HandleFunc("/api/member", UserAuth(h.GetMember, h)).Methods("GET")
-	h.Router.HandleFunc("/api/member", JWTAuth(h.Register)).Methods("POST")
-
-	h.Router.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(Response{Success: true, Message: "I'm alive!", Code: http.StatusOK}); err != nil {
-			panic(err)
-		}
-	})
-}
-
 func SetHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 }
@@ -200,4 +186,30 @@ func GetErrorResponseWithCode(w http.ResponseWriter, message string, code int) {
 	if err := json.NewEncoder(w).Encode(Response{Success: false, Message: message, Code: code}); err != nil {
 		panic(err)
 	}
+}
+
+// SetupRoutes - sets up all the routes for our application
+func (h *Handler) SetupRoutes() {
+	fmt.Println("Setting up routes")
+	h.Router = mux.NewRouter()
+	h.Router.Use(LoggingMiddleware)
+
+	h.Router.HandleFunc("/api/login", JWTAuth(h.Login)).Methods("POST")
+
+	h.Router.HandleFunc("/api/member", UserAuth(h.GetMember, h)).Methods("GET")
+	h.Router.HandleFunc("/api/member", JWTAuth(h.Register)).Methods("POST")
+
+	h.Router.HandleFunc("/api/consumptions", UserAuth(h.Consumptions, h)).Methods("GET")
+	h.Router.HandleFunc("/api/consumption/{id}", UserAuth(h.Consumption, h)).Methods("GET")
+	h.Router.HandleFunc("/api/consumption", UserAuth(h.ConsumptionAdd, h)).Methods("POST")
+	h.Router.HandleFunc("/api/consumption/{id}", UserAuth(h.ConsumptionUpdate, h)).Methods("PUT")
+	h.Router.HandleFunc("/api/consumption/{id}", UserAuth(h.ConsumptionDelete, h)).Methods("DELETE")
+
+	h.Router.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(Response{Success: true, Message: "I'm alive!", Code: http.StatusOK}); err != nil {
+			panic(err)
+		}
+	})
 }

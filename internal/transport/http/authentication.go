@@ -12,7 +12,7 @@ import (
 )
 
 // Login -
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request, m responses.MemberResponse) {
 	SetHeaders(w)
 	var request requests.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -43,7 +43,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	SendOkResponse(w, loginResponse)
 }
 
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request, m responses.MemberResponse) {
 	SetHeaders(w)
 	var request requests.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

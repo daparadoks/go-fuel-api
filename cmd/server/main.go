@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/daparadoks/go-fuel-api/internal/consumption"
 	"github.com/daparadoks/go-fuel-api/internal/database"
 	"github.com/daparadoks/go-fuel-api/internal/member"
 	transportHTTP "github.com/daparadoks/go-fuel-api/internal/transport/http"
@@ -41,8 +42,9 @@ func (app *App) Run() error {
 	rand.Seed(time.Now().UnixNano())
 
 	memberService := member.NewService(db)
+	consumptionService := consumption.NewService(db)
 
-	handler := transportHTTP.NewHandler(memberService)
+	handler := transportHTTP.NewHandler(memberService, consumptionService)
 	handler.SetupRoutes()
 
 	if err := http.ListenAndServe(":3434", handler.Router); err != nil {

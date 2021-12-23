@@ -28,11 +28,6 @@ type MemberToken struct {
 	ExpireDate  time.Time
 }
 
-// MemberService -
-type MemberService interface {
-	GetMember(username string) (Member, error)
-}
-
 // NewService -
 func NewService(db *gorm.DB) *Service {
 	return &Service{
@@ -43,7 +38,7 @@ func NewService(db *gorm.DB) *Service {
 // GetMember -
 func (s *Service) GetMember(username string) (Member, error) {
 	var member Member
-	if result := s.DB.First(&member).Where("Username = ?", username); result.Error != nil {
+	if result := s.DB.Where("username=?", username).First(&member); result.Error != nil {
 		return Member{}, result.Error
 	}
 	return member, nil
@@ -52,7 +47,7 @@ func (s *Service) GetMember(username string) (Member, error) {
 // GetMember -
 func (s *Service) GetMemberById(id uint) (Member, error) {
 	var member Member
-	if result := s.DB.First(&member).Where("ID = ?", id); result.Error != nil {
+	if result := s.DB.Where("ID = ?", id).First(&member); result.Error != nil {
 		return Member{}, result.Error
 	}
 	return member, nil
@@ -61,7 +56,7 @@ func (s *Service) GetMemberById(id uint) (Member, error) {
 // GetMember -
 func (s *Service) GetMemberByMail(mail string) (Member, error) {
 	var member Member
-	if result := s.DB.First(&member).Where("Mail = ?", mail); result.Error != nil {
+	if result := s.DB.Where("Mail = ?", mail).First(&member); result.Error != nil {
 		return Member{}, result.Error
 	}
 	return member, nil
@@ -78,6 +73,7 @@ func (s *Service) GetMemberByToken(token string) (Member, error) {
 	return member, err
 }
 
+//
 func (s *Service) Register(member Member) (Member, error) {
 	if result := s.DB.Save(&member); result.Error != nil {
 		return Member{}, result.Error
@@ -87,19 +83,18 @@ func (s *Service) Register(member Member) (Member, error) {
 
 func (s *Service) GetToken(token string) (MemberToken, error) {
 	var memberToken MemberToken
-	result := s.DB.First(&memberToken).Where("Token=? and  ExpireDate<?", token, time.Now())
+	result := s.DB.Where("Token=?", token).First(&memberToken)
 
 	return memberToken, result.Error
 }
 
 func (s *Service) GetTokenByMemberId(deviceToken string, memberId uint) (MemberToken, error) {
 	var token MemberToken
-	result := s.DB.First(&token).Where("DeviceToken=? and MemberId=?", deviceToken, memberId)
+	result := s.DB.Where("member_id=? and device_token=?", memberId, deviceToken).First(&token)
 	if result.Error == nil {
 		return token, nil
 	}
 
-	println("m2")
 	token, err := s.AddToken(deviceToken, memberId)
 	if err != nil {
 		return MemberToken{}, err

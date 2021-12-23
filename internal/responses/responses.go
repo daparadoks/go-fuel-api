@@ -12,8 +12,18 @@ type RegisterResponse struct {
 }
 
 type MemberResponse struct {
-	Id       uint
-	Username string
-	Mail     string
-	Token    string
+	Id          uint
+	Username    string
+	Mail        string
+	Token       string
+	DeviceToken string
+	IsGues      bool
+}
+
+func InitGuest(deviceToken string) MemberResponse {
+	var response MemberResponse
+	response.DeviceToken = deviceToken
+	response.IsGues = true
+
+	return response
 }
