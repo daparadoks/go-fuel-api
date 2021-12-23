@@ -15,4 +15,5 @@ type MemberResponse struct {
 	Id       uint
 	Username string
 	Mail     string
+	Token    string
 }

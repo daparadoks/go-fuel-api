@@ -87,7 +87,7 @@ func (s *Service) Register(member Member) (Member, error) {
 
 func (s *Service) GetToken(token string) (MemberToken, error) {
 	var memberToken MemberToken
-	result := s.DB.First(&memberToken).Where("Token=?", token)
+	result := s.DB.First(&memberToken).Where("Token=? and  ExpireDate<?", token, time.Now())
 
 	return memberToken, result.Error
 }

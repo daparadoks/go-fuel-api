@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/daparadoks/go-fuel-api/internal/member"
-	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/daparadoks/go-fuel-api/internal/responses"
+	jwt "github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
@@ -74,7 +75,7 @@ func JWTAuth(original func(w http.ResponseWriter, r *http.Request)) func(w http.
 			return
 		}
 
-		if validateToken(authHeaderParts[1]) {
+		if validateToken(authHeaderParts[1], "") {
 			original(w, r)
 		} else {
 			SetHeaders(w)
@@ -83,10 +84,66 @@ func JWTAuth(original func(w http.ResponseWriter, r *http.Request)) func(w http.
 	}
 }
 
+// JWTAuth - a handy middleware function that will provide basic auth around specific endpoints
+func UserAuth(original func(w http.ResponseWriter, r *http.Request, m responses.MemberResponse), h *Handler) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Info("user auth")
+		authHeader := r.Header["Authorization"]
+		if authHeader == nil {
+			SetHeaders(w)
+			GetErrorResponseWithCode(w, "authorization required", 401)
+			return
+		}
+
+		log.Info("user auth 2")
+		authHeaderParts := strings.Split(authHeader[0], " ")
+		if len(authHeaderParts) != 2 || strings.ToLower(authHeaderParts[0]) != "bearer" {
+			SetHeaders(w)
+			GetErrorResponseWithCode(w, "authorization is not valid", 401)
+			return
+		}
+
+		log.Info("user auth 3")
+
+		if validateToken(authHeaderParts[1], "") {
+			log.Info("user auth 4")
+			tokenHeader := r.Header["Token"]
+			token := tokenHeader[0]
+			memberToken, err := h.MemberService.GetToken(token)
+			if err != nil || memberToken.Token != token {
+				SetHeaders(w)
+				GetErrorResponseWithCode(w, "user token is not valid", 401)
+				return
+			}
+
+			member, memberErr := h.MemberService.GetMemberById(memberToken.MemberId)
+			if memberErr != nil {
+				SetHeaders(w)
+				GetErrorResponseWithCode(w, "user token is not valid", 401)
+				return
+			}
+
+			var currentMember responses.MemberResponse
+			currentMember.Id = memberToken.MemberId
+			currentMember.Mail = member.Mail
+			currentMember.Username = member.Username
+			currentMember.Token = memberToken.Token
+			original(w, r, currentMember)
+		} else {
+			SetHeaders(w)
+			GetErrorResponseWithCode(w, "authorization validation has failed", 401)
+			return
+		}
+	}
+}
+
 // validateToken - validates an incoming jwt token
-func validateToken(accessToken string) bool {
-	// replace this by loading in a private RSA cert for more security
-	var mySigningKey = []byte("missionimpossible")
+func validateToken(accessToken string, userKey string) bool {
+	if len(userKey) == 0 {
+		userKey = "paradox"
+	}
+
+	var mySigningKey = []byte(userKey)
 	token, err := jwt.Parse(accessToken, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("There was an error")
@@ -107,10 +164,10 @@ func (h *Handler) SetupRoutes() {
 	h.Router = mux.NewRouter()
 	h.Router.Use(LoggingMiddleware)
 
-	h.Router.HandleFunc("/api/login", BasicAuth(h.Login)).Methods("POST")
+	h.Router.HandleFunc("/api/login", JWTAuth(h.Login)).Methods("POST")
 
-	h.Router.HandleFunc("/api/member", BasicAuth(h.GetMember)).Methods("GET")
-	h.Router.HandleFunc("/api/member", BasicAuth(h.Register)).Methods("POST")
+	h.Router.HandleFunc("/api/member", UserAuth(h.GetMember, h)).Methods("GET")
+	h.Router.HandleFunc("/api/member", JWTAuth(h.Register)).Methods("POST")
 
 	h.Router.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
