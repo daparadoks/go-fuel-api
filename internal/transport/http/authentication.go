@@ -1,12 +1,16 @@
 package http
 
 import (
+	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/daparadoks/go-fuel-api/internal/member"
+	redisService "github.com/daparadoks/go-fuel-api/internal/redis"
 	"github.com/daparadoks/go-fuel-api/internal/requests"
 	"github.com/daparadoks/go-fuel-api/internal/responses"
 )
@@ -24,23 +28,31 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request, m responses.Memb
 		GetErrorResponse(w, "Failed to login")
 		return
 	}
-	if member.Password != request.Password {
+	passwordHash := md5.Sum([]byte(request.Password))
+	if member.Password != hex.EncodeToString(passwordHash[:]) {
 		GetErrorResponse(w, "Username or password is invalid")
 		return
 	}
 
-	token, err := h.MemberService.GetTokenByMemberId(request.DeviceToken, member.ID)
-	if err != nil {
+	now := time.Now()
+	token, err := h.MemberService.GetTokenByMemberId(m.Token, member.ID)
+	if err != nil || token.ExpireDate.Before(now) {
 		GetErrorResponse(w, "Failed to login")
 		return
 	}
 
-	var loginResponse = responses.LoginResponse{
-		MemberId: member.ID,
-		Username: member.Username,
-		Token:    token.Token,
-	}
-	SendOkResponse(w, loginResponse)
+	m.Id = member.ID
+	m.Username = member.Username
+	m.Mail = member.Mail
+	m.LastLogin = time.Now()
+	m.Token = token.Token
+	m.IsGues = false
+	m.Password = member.Password
+
+	jsonData, _ := json.Marshal(m)
+	redisService.Set(context.Background(), "LoginInfo_"+m.Token, string(jsonData))
+	m.Password = ""
+	SendOkResponse(w, m)
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request, m responses.MemberResponse) {
@@ -75,13 +87,14 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request, m responses.M
 		GetErrorResponse(w, " Bu mail adresiyle kayıtlı bir üyelik mevcuttur: "+request.Mail)
 		return
 	}
+	passwordHash := md5.Sum([]byte(request.Password))
 	var member member.Member
 	member.Username = request.Username
-	member.Password = request.Password
+	member.Password = hex.EncodeToString(passwordHash[:])
 	member.Mail = request.Mail
 	member.CreatedAt = time.Now()
 
-	member, err := h.MemberService.Register(member)
+	member, err := h.MemberService.AddOrUpdateMember(member)
 	var response responses.RegisterResponse
 
 	if err != nil {
@@ -96,4 +109,22 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request, m responses.M
 	response.Username = member.Username
 
 	SendOkResponse(w, response)
+}
+
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request, m responses.MemberResponse) {
+	member, err := h.MemberService.GetMemberById(m.Id)
+	if err != nil {
+		GetErrorResponseWithError(w, err)
+		return
+	}
+
+	newPassword := md5.Sum([]byte("1234"))
+	member.Password = hex.EncodeToString(newPassword[:])
+	member, err = h.MemberService.AddOrUpdateMember(member)
+	if err != nil {
+		GetErrorResponseWithError(w, err)
+		return
+	}
+
+	SendOkResponse(w, true)
 }

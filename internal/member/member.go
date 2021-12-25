@@ -12,6 +12,17 @@ type Service struct {
 	DB *gorm.DB
 }
 
+type MemberService interface {
+	GetMember(username string) (Member, error)
+	GetMemberById(id uint) (Member, error)
+	GetMemberByMail(mail string) (Member, error)
+	GetMemberByToken(token string) (Member, error)
+	AddOrUpdateMember(member Member) (Member, error)
+	GetToken(token string) (MemberToken, error)
+	GetTokenByMemberId(deviceToken string, memberId uint) (MemberToken, error)
+	AddToken(deviceToken string, memberId uint) (MemberToken, error)
+}
+
 // Member -
 type Member struct {
 	gorm.Model
@@ -74,7 +85,7 @@ func (s *Service) GetMemberByToken(token string) (Member, error) {
 }
 
 //
-func (s *Service) Register(member Member) (Member, error) {
+func (s *Service) AddOrUpdateMember(member Member) (Member, error) {
 	if result := s.DB.Save(&member); result.Error != nil {
 		return Member{}, result.Error
 	}

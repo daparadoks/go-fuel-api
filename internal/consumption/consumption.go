@@ -10,6 +10,14 @@ type Service struct {
 	DB *gorm.DB
 }
 
+type ConsumptionService interface {
+	Get(id uint) (Consumption, error)
+	GetList(memberId uint) ([]Consumption, error)
+	Add(consumption Consumption) (Consumption, error)
+	Update(id uint, newConsumption Consumption) (Consumption, error)
+	Delete(id uint) error
+}
+
 func NewService(db *gorm.DB) *Service {
 	return &Service{
 		DB: db,

@@ -1,13 +1,16 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/daparadoks/go-fuel-api/internal/constants"
 	"github.com/daparadoks/go-fuel-api/internal/consumption"
 	"github.com/daparadoks/go-fuel-api/internal/member"
+	redisService "github.com/daparadoks/go-fuel-api/internal/redis"
 	"github.com/daparadoks/go-fuel-api/internal/responses"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
@@ -25,6 +28,13 @@ type Response struct {
 	Success bool
 	Message string
 	Code    int
+}
+
+type ResponseWithData struct {
+	Success bool
+	Message string
+	Code    int
+	Data    interface{}
 }
 
 // NewHandler - returns a pointer to a Handler
@@ -80,7 +90,11 @@ func JWTAuth(original func(w http.ResponseWriter, r *http.Request, m responses.M
 
 		if validateToken(authHeaderParts[1], "") {
 			deviceTokenHeader := r.Header["DeviceToken"]
-			deviceToken := deviceTokenHeader[0]
+			deviceToken := ""
+			if deviceTokenHeader != nil {
+				deviceToken = deviceTokenHeader[0]
+			}
+
 			currentMember := responses.InitGuest(deviceToken)
 			original(w, r, currentMember)
 		} else {
@@ -93,9 +107,11 @@ func JWTAuth(original func(w http.ResponseWriter, r *http.Request, m responses.M
 // JWTAuth - a handy middleware function that will provide basic auth around specific endpoints
 func UserAuth(original func(w http.ResponseWriter, r *http.Request, m responses.MemberResponse), h *Handler) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Info("user auth")
 		authHeader := r.Header["Authorization"]
-		if authHeader == nil {
+		userTokenHeader := r.Header["Token"]
+		deviceTokenHeader := r.Header["DeviceToken"]
+
+		if authHeader == nil || userTokenHeader == nil {
 			SetHeaders(w)
 			GetErrorResponseWithCode(w, "authorization required", 401)
 			return
@@ -108,26 +124,41 @@ func UserAuth(original func(w http.ResponseWriter, r *http.Request, m responses.
 			return
 		}
 
-		if validateToken(authHeaderParts[1], "") {
-			tokenHeader := r.Header["Token"]
-			token := tokenHeader[0]
-			memberToken, err := h.MemberService.GetToken(token)
-			if err != nil || memberToken.Token != token {
-				SetHeaders(w)
-				GetErrorResponseWithCode(w, "user token is not valid", 401)
-				return
+		userToken := userTokenHeader[0]
+		authToken := authHeaderParts[1]
+		deviceToken := ""
+
+		loginInfoJson := redisService.Get(context.Background(), constants.LoginInfo(userToken))
+		if len(loginInfoJson) > 0 {
+			var currentMember responses.MemberResponse
+			json.Unmarshal([]byte(loginInfoJson), &currentMember)
+
+			if currentMember.Id > 0 && len(currentMember.Username) > 0 && validateToken(authToken, currentMember.Username+"-"+currentMember.Password) {
+				fmt.Println("user auth with cache")
+				original(w, r, currentMember)
 			}
+		}
 
-			member, memberErr := h.MemberService.GetMemberById(memberToken.MemberId)
-			if memberErr != nil {
-				SetHeaders(w)
-				GetErrorResponseWithCode(w, "user token is not valid", 401)
-				return
-			}
+		fmt.Println("user auth without cache")
+		memberToken, err := h.MemberService.GetToken(userToken)
+		if err != nil || memberToken.Token != userToken {
+			SetHeaders(w)
+			GetErrorResponseWithCode(w, "user token is not valid", 401)
+			return
+		}
 
-			deviceTokenHeader := r.Header["Authorization"]
-			deviceToken := deviceTokenHeader[0]
+		member, memberErr := h.MemberService.GetMemberById(memberToken.MemberId)
+		if memberErr != nil {
+			SetHeaders(w)
+			GetErrorResponseWithCode(w, "user token is not valid", 401)
+			return
+		}
 
+		if deviceTokenHeader != nil {
+			deviceToken = deviceTokenHeader[0]
+		}
+
+		if validateToken(authToken, member.Username+"-"+member.Password) {
 			var currentMember responses.MemberResponse
 			currentMember.Id = memberToken.MemberId
 			currentMember.Mail = member.Mail
@@ -170,7 +201,7 @@ func SetHeaders(w http.ResponseWriter) {
 
 func SendOkResponse(w http.ResponseWriter, resp interface{}) {
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	if err := json.NewEncoder(w).Encode(ResponseWithData{Success: true, Data: resp}); err != nil {
 		panic(err)
 	}
 }
@@ -195,6 +226,7 @@ func (h *Handler) SetupRoutes() {
 	h.Router.Use(LoggingMiddleware)
 
 	h.Router.HandleFunc("/api/login", JWTAuth(h.Login)).Methods("POST")
+	h.Router.HandleFunc("/api/resetpassword", UserAuth(h.ResetPassword, h)).Methods("POST")
 
 	h.Router.HandleFunc("/api/member", UserAuth(h.GetMember, h)).Methods("GET")
 	h.Router.HandleFunc("/api/member", JWTAuth(h.Register)).Methods("POST")

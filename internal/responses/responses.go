@@ -1,5 +1,7 @@
 package responses
 
+import "time"
+
 type LoginResponse struct {
 	Token    string
 	Username string
@@ -18,6 +20,8 @@ type MemberResponse struct {
 	Token       string
 	DeviceToken string
 	IsGues      bool
+	LastLogin   time.Time
+	Password    string
 }
 
 func InitGuest(deviceToken string) MemberResponse {
