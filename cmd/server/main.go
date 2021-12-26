@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/daparadoks/go-fuel-api/config"
+	"github.com/daparadoks/go-fuel-api/rabbit"
 	"math/rand"
 	"net/http"
 	"time"
@@ -30,6 +32,13 @@ func (app *App) Run() error {
 			"AppVersion": app.Version,
 		}).Info("Setting Up Our APP")
 
+	configurationManager := config.NewConfigurationManager()
+	rabbitConfig := configurationManager.GetRabbitConfig()
+	quesConfig := configurationManager.GetQuesConfig()
+
+	rabbitClient := rabbit.NewRabbitClient(rabbitConfig, quesConfig)
+	rabbitClient.DeclareExchangeQueBindings()
+
 	var err error
 	db, err := database.NewDatabase()
 	if err != nil {
@@ -52,6 +61,7 @@ func (app *App) Run() error {
 		return err
 	}
 
+	defer rabbitClient.CloseConnection()
 	return nil
 }
 

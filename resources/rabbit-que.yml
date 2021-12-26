@@ -1,0 +1,14 @@
+que:
+  consumption:
+    consumptionCreated:
+      channelCount: 1
+      prefetchCount: 10
+      exchange: "consumption.events"
+      routingKey: "consumptionCreated"
+      que: "consumption.event.consumptionCreated"
+    consumptionUpdated:
+      channelCount: 1
+      prefetchCount: 10
+      exchange: "consumption.events"
+      routingKey: "consumptionUpdated"
+      que: "consumption.event.consumptionUpdated"
